@@ -1,0 +1,234 @@
+<!doctype html>
+<html lang="tr">
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>MelCandy - İndir</title>
+  <meta name="theme-color" content="#1e1f22">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
+  <style>
+    :root {
+      --bg: #1e1f22;
+      --card: #2b2d31;
+      --text: #f2f3f5;
+      --sub: #b5bac1;
+      --brand: #5865f2;
+      --border: #3f4147;
+    }
+
+    * {
+      box-sizing: border-box;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif
+    }
+
+    body {
+      margin: 0;
+      background: radial-gradient(circle at top, #313338, var(--bg));
+      color: var(--text);
+      line-height: 1.6
+    }
+
+    header {
+      text-align: center;
+      padding: calc(24px + env(safe-area-inset-top)) 16px 16px
+    }
+
+    .logo {
+      width: 84px;
+      height: 84px;
+      border-radius: 20px;
+      margin: 0 auto 12px;
+      background: radial-gradient(circle at top, #7aa2ff, var(--brand));
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 40px 60px -40px rgba(88, 101, 242, .9)
+    }
+
+    .logo svg {
+      width: 46px;
+      height: 46px
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 28px
+    }
+
+    .sub {
+      margin: 6px 0 0;
+      color: var(--sub)
+    }
+
+    main {
+      display: grid;
+      gap: 16px;
+      padding: 0 16px calc(32px + env(safe-area-inset-bottom));
+      max-width: 420px;
+      margin: 0 auto
+    }
+
+    .card {
+      background: linear-gradient(180deg, rgba(255, 255, 255, .02) 0%, transparent 100%);
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      overflow: hidden;
+      box-shadow: 0 60px 80px -60px rgba(88, 101, 242, .4)
+    }
+
+    .card-body {
+      display: grid;
+      gap: 14px;
+      padding: 20px
+    }
+
+    .btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      border-radius: 999px;
+      padding: 14px 18px;
+      text-decoration: none;
+      font-weight: 600;
+      border: 1px solid transparent
+    }
+
+    .btn-primary {
+      background: linear-gradient(90deg, #7aa2ff, var(--brand));
+      color: #fff
+    }
+
+    .btn-ghost {
+      background: transparent;
+      color: var(--text);
+      border-color: var(--border)
+    }
+
+    .list {
+      display: grid;
+      gap: 12px;
+      margin: 0;
+      padding: 0;
+      list-style: none
+    }
+
+    .list-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 12px
+    }
+
+    .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--brand);
+      margin-top: 9px;
+      box-shadow: 0 0 0 6px rgba(88, 101, 242, .12)
+    }
+
+    .list-text strong {
+      display: block
+    }
+
+    .list-text span {
+      color: var(--sub);
+      font-size: 14px
+    }
+
+    footer {
+      text-align: center;
+      padding: 0 16px calc(20px + env(safe-area-inset-bottom));
+      color: var(--sub);
+      font-size: 14px
+    }
+  </style>
+</head>
+
+<body>
+  <header>
+    <div class="logo">
+      <svg viewBox="0 0 24 24" fill="none">
+        <path
+          d="M12 3.2c-4.86 0-8.8 3.58-8.8 8 0 3.53 2.53 6.56 6.16 7.63.48.1.65-.21.65-.46 0-.23-.01-.83-.01-1.63-2.5.54-3.03-1.2-3.03-1.2-.44-1.12-1.08-1.42-1.08-1.42-.88-.6.07-.59.07-.59.98.07 1.5 1.01 1.5 1.01.87 1.48 2.28 1.05 2.84.8.09-.63.34-1.05.62-1.29-2-.23-4.1-1-4.1-4.44 0-.98.35-1.78.92-2.41-.09-.23-.4-1.14.09-2.37 0 0 .75-.24 2.46.92a8.5 8.5 0 0 1 4.48 0c1.71-1.16 2.46-.92 2.46-.92.49 1.23.18 2.14.09 2.37.57.63.92 1.43.92 2.41 0 3.45-2.11 4.21-4.12 4.43.35.3.66.9.66 1.82 0 1.31-.01 2.37-.01 2.69 0 .25.17.57.66.46 3.63-1.07 6.16-4.1 6.16-7.63 0-4.42-3.94-8-8.8-8Z"
+          fill="currentColor" />
+      </svg>
+    </div>
+    <h1>MelCandy</h1>
+    <p class="sub">Sadece ikimiz için, ayrı uygulama olarak indir</p>
+  </header>
+  <main>
+    <section class="card">
+      <div class="card-body">
+        <a class="btn btn-primary" id="apk-link" href="#" download>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+            <path d="M12 3v12m0 0 5-5m-5 5-5-5M5 21h14" stroke="currentColor" stroke-width="1.8"
+              stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
+          Uygulamayı İndir (.APK)
+        </a>
+        <a class="btn btn-ghost" href="/">
+          Tarayıcıda Aç
+        </a>
+      </div>
+    </section>
+    <section class="card">
+      <div class="card-body">
+        <div>
+          <strong>Nasıl kurulur</strong>
+          <p class="sub" style="margin:4px 0 0">WhatsApp'tan bu sayfayı açtığın da çalışır</p>
+        </div>
+        <ol class="list">
+          <li class="list-item">
+            <span class="dot"></span>
+            <div class="list-text">
+              <strong>İndir</strong>
+              <span>Yukarıdaki butona basarak APK'yı indir</span>
+            </div>
+          </li>
+          <li class="list-item">
+            <span class="dot"></span>
+            <div class="list-text">
+              <strong>Yükle</strong>
+              <span>Bilinmeyen kaynaklara izin verip kurulumu tamamla</span>
+            </div>
+          </li>
+          <li class="list-item">
+            <span class="dot"></span>
+            <div class="list-text">
+              <strong>Aç</strong>
+              <span>Uygulama ayrı pencere gibi, tam ekran açılacak</span>
+            </div>
+          </li>
+        </ol>
+      </div>
+    </section>
+  </main>
+  <footer>MelCandy · Sadece ikimiz için</footer>
+  <script>
+    (function () {
+      const link = document.getElementById('apk-link');
+      fetch('/MelCandy.apk', { method: 'HEAD' }).then(r => {
+        if (r.ok) {
+          link.href = '/MelCandy.apk';
+          link.removeAttribute('disabled');
+        } else {
+          link.textContent = 'APK henüz hazır değil';
+          link.style.opacity = '.6';
+          link.style.pointerEvents = 'none';
+        }
+      }).catch(() => {
+        link.textContent = 'APK henüz hazır değil';
+        link.style.opacity = '.6';
+        link.style.pointerEvents = 'none';
+      });
+    })();
+  </script>
+</body>
+
+</html>

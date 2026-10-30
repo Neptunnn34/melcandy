@@ -1,0 +1,43 @@
+{
+  "name": "melcandy",
+  "version": "1.0.0",
+  "description": "MelCandy - Sadece ikimiz için",
+  "main": "main.js",
+  "author": "MelCandy",
+  "license": "MIT",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder"
+  },
+  "build": {
+    "appId": "com.melcandy.app",
+    "productName": "MelCandy",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "**/*",
+      "../server.js",
+      "../package.json",
+      "../lib/**/*",
+      "../public/**/*",
+      "../data/**/*"
+    ],
+    "win": {
+      "target": "nsis",
+      "icon": "icon.ico"
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": false,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "MelCandy"
+    }
+  },
+  "devDependencies": {
+    "electron": "^31.3.1",
+    "electron-builder": "^24.13.3"
+  }
+}

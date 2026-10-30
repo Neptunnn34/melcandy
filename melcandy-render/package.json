@@ -1,0 +1,16 @@
+{
+  "name": "melcandy",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "MelCandy — fotoğraf, hikâye ve sohbet paylaşımı için küçük, reklamsız bir sosyal ağ.",
+  "engines": {
+    "node": ">=22.5.0"
+  },
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js",
+    "smoke": "node scripts/smoke.mjs",
+    "icons": "powershell -ExecutionPolicy Bypass -File scripts/make-icons.ps1"
+  }
+}
