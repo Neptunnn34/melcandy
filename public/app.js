@@ -170,6 +170,13 @@ function linkify(text, { tags = true } = {}) {
   return out;
 }
 
+function linkifyNoMentions(text) {
+  return linkify(text, { tags: false }).replace(
+    /(^|[\s(])@([a-zA-Z0-9._]{3,24})/g,
+    (all, pre, user) => `${pre}<button type="button" class="tag tag-btn" data-mini-profile="${encodeURIComponent(user)}">@${user}</button>`,
+  );
+}
+
 function formatBytes(bytes) {
   const value = Number(bytes) || 0;
   if (value < 1024) return `${value} B`;
@@ -1323,7 +1330,7 @@ function matchRoute(pathname) {
 
 const Views = {};
 
-async function route() {
+async function route({ keepScroll = false } = {}) {
   if (!S.me) return;
   const parsed = matchRoute(location.pathname);
   S.route = parsed;
@@ -1337,7 +1344,7 @@ async function route() {
     root.innerHTML = `<div class="view"><div class="empty-state"><h3>Sayfa bulunamadı</h3></div></div>`;
     return;
   }
-  if (!['messages', 'conversation'].includes(parsed.name)) window.scrollTo({ top: 0, behavior: 'instant' });
+  if (!keepScroll && !['messages', 'conversation'].includes(parsed.name)) window.scrollTo({ top: 0, behavior: 'instant' });
   try {
     const cleanup = await view(root, parsed);
     S.currentView = { name: parsed.name, cleanup: typeof cleanup === 'function' ? cleanup : null };
@@ -1536,7 +1543,12 @@ function wireGlobals() {
       if (boot.authenticated) {
         S.badges = boot.badges || S.badges;
         setNavBadges();
+        try { connectSSE(); } catch {}
+        // Aktif sohbet açıksa yeni mesajları çek (alt-tab / arka plan dönüşü %100 tazeleme)
         emit('reconnected', boot);
+        if (S.currentView && ['messages', 'conversation'].includes(S.currentView.name)) {
+          try { route({ keepScroll: true }); } catch {}
+        }
       }
     }).catch(() => {});
   };
@@ -1547,9 +1559,12 @@ function wireGlobals() {
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible' && S.me) {
       api('/api/badges').then((data) => refreshBadges(data.badges)).catch(() => {});
+      try { connectSSE(); } catch {}
+      // Sekme geri gelince her durumda aktif görünümü tazele (arka plan kaybolması %100 fix)
+      emit('reconnected', {});
       try {
-        if (!S.es || S.es.readyState === 2) connectSSE();
-        else emit('reconnected', {});
+        if (S.currentView && ['messages', 'conversation'].includes(S.currentView.name)) route({ keepScroll: true });
+        else if (S.currentView && S.currentView.name === 'feed') route({ keepScroll: true });
       } catch {}
     }
   });
@@ -3185,6 +3200,50 @@ Views.notFound = (root) => {
   </div></div>`;
 };
 
+function openMiniProfile(username, anchorEl) {
+  closeAllOverlays();
+  api(`/api/users/${encodeURIComponent(username)}`).then((data) => {
+    const user = data.user || {};
+    const act = user.activity && user.activity.type !== 'none' ? user.activity : null;
+    const actHTML = act ? (act.type === 'listening'
+      ? `<div class="mini-spotify">
+          <div class="mini-spotify-head"><span>Spotify dinliyor</span><span class="mini-spotify-live"><i></i>canlı</span></div>
+          <strong>${esc(act.title || '')}</strong>
+          <small>${esc(act.subtitle || '')}</small>
+        </div>`
+      : `<div class="mini-spotify"><div class="mini-spotify-head"><span>Oynuyor</span></div><strong>${esc(act.title || '')}</strong><small>${esc(act.subtitle || '')}</small></div>`) : '';
+    const entry = openOverlay(`<div class="mini-profile" role="dialog" aria-label="Profil kartı">
+      <div class="mini-profile-cover">${user.cover ? `<img src="/api/media/${esc(user.cover)}" alt="">` : ''}</div>
+      <div class="mini-profile-body">
+        <div class="mini-profile-ava">${avatarHTML(user, 'avatar-lg', { dot: true })}</div>
+        <h3>${esc(user.displayName || user.username || '')}</h3>
+        <div class="mini-profile-handle">@${esc(user.username || '')}${user.online ? ' · <span class="online">çevrimiçi</span>' : ''}</div>
+        ${user.bio ? `<p class="mini-profile-bio">${esc(user.bio)}</p>` : ''}
+        <div class="mini-profile-counts"><span><b>${fmtCount(user.counts?.posts || 0)}</b> gönderi</span><span><b>${fmtCount(user.counts?.followers || 0)}</b> takipçi</span><span><b>${fmtCount(user.counts?.following || 0)}</b> takip</span></div>
+        ${actHTML}
+        <div class="mini-profile-actions">
+          <a class="btn btn-sm btn-primary" href="/u/${esc(user.username || '')}" data-go="/u/${esc(user.username || '')}">${icon('user')} Profili aç</a>
+          <a class="btn btn-sm btn-soft" href="/mesajlar/${esc(user.username || '')}" data-go="/mesajlar/${esc(user.username || '')}">${icon('message')} Mesaj</a>
+        </div>
+      </div>
+    </div>`, { layerClass: 'mini-profile-layer' });
+    if (anchorEl && anchorEl.getBoundingClientRect) {
+      try {
+        const r = anchorEl.getBoundingClientRect();
+        const card = entry.layer.querySelector('.mini-profile');
+        if (card) {
+          const w = 320;
+          let left = Math.min(Math.max(12, r.left + r.width / 2 - w / 2), window.innerWidth - w - 12);
+          let top = r.bottom + 10;
+          if (top + 420 > window.innerHeight) top = Math.max(12, r.top - 430);
+          card.style.left = `${left}px`;
+          card.style.top = `${top}px`;
+        }
+      } catch {}
+    }
+  }).catch((error) => toast(error.message || 'Profil açılamadı', 'error'));
+}
+
 /* ------------------------------------------------------------------ profil */
 
 function profileEmptyHTML({ mine }) {
@@ -3841,7 +3900,7 @@ function chatBubbleHTML(message) {
   if (message.deleted) {
     return `<div class="msg-bubble" style="font-style:italic;opacity:.6" data-msg-menu="${esc(message.id)}">Bu mesaj silindi</div>`;
   }
-  const body = message.body ? linkify(message.body) : '';
+  const body = message.body ? linkifyNoMentions(message.body) : '';
   const sticker = chatStickerHTML(message.sticker);
   const gap = body && (message.media || sticker) ? '<div style="height:6px"></div>' : '';
   const onlySticker = Boolean(sticker) && !body && !quote;
@@ -3850,9 +3909,10 @@ function chatBubbleHTML(message) {
 
 function chatRowHTML(message, partner) {
   const own = Boolean(message.mine);
-  const avatar = !own
-    ? `<a href="/u/${esc(message.sender?.username || partner?.username || '')}" data-go="/u/${esc(message.sender?.username || partner?.username || '')}" aria-label="${esc(message.sender?.displayName || '')}">${avatarHTML(message.sender || partner, 'avatar-xs')}</a>`
-    : '';
+  const who = message.sender?.username || partner?.username || '';
+  const avatar = !own && who
+    ? `<button type="button" class="avatar-btn" data-mini-profile="${esc(who)}" aria-label="${esc(message.sender?.displayName || '')} profili">${avatarHTML(message.sender || partner, 'avatar-xs')}</button>`
+    : (!own ? avatarHTML(message.sender || partner, 'avatar-xs') : '');
   const meta = [fmtTime(message.createdAt)];
   if (message.editedAt) meta.push('düzenlendi');
   if (own) meta.push(message.seenAt ? '<span class="seen">Görüldü</span>' : 'Gönderildi');
@@ -4772,6 +4832,13 @@ async function renderConversation(container, username) {
   };
 
   const onChatClick = async (event) => {
+    const ava = event.target.closest('[data-mini-profile]');
+    if (ava) {
+      event.preventDefault();
+      event.stopPropagation();
+      openMiniProfile(ava.dataset.miniProfile, ava);
+      return;
+    }
     if (event.target.closest('[data-chat-media]')) {
       event.preventDefault();
       openLightbox(event.target.closest('[data-chat-media]').dataset.chatMedia);
@@ -5531,6 +5598,28 @@ async function renderSettings(root) {
       </div>`;
       return;
     }
+    if (info && info.needsSetup) {
+      panel.innerHTML = `<div class="invite-box">
+        <span class="empty-icon" style="width:52px;height:52px;border-radius:16px;margin:0">${icon('music')}</span>
+        <strong>Otomatik bağlantı kapalı</strong>
+        <p>Sunucuda Spotify anahtarı yok. O yüzden "Spotify ile bağlan" şu an çalışmaz. Aşağıdan <b>manuel</b> yaz — profilinde aynı rozet görünür.</p>
+        <div class="invite-actions">
+          <button type="button" class="btn btn-sm btn-outline" data-spotify-manual>Manuel yaz</button>
+        </div>
+      </div>
+    <form data-spotify-manual-form style="display:grid;gap:10px;margin-top:12px">
+      <div class="field"><label for="sp-title">Şarkı / aktivite</label>
+        <div class="input-wrap"><input id="sp-title" name="title" maxlength="80" placeholder="örn. Рычаги Машин — Кошка"></div></div>
+      <div class="field"><label for="sp-sub">Sanatçı / detay <span class="hint">isteğe bağlı</span></label>
+        <div class="input-wrap"><input id="sp-sub" name="subtitle" maxlength="80" placeholder="örn. gece tekrarı"></div></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-sm btn-soft" type="submit" data-spotify-manual-save>${icon('check')} Rozeti göster</button>
+        <button class="btn btn-sm btn-ghost" type="button" data-spotify-manual-clear>Rozeti kaldır</button>
+      </div>
+      <p class="tiny muted">Manuel rozet 4 saat görünür.</p>
+    </form>`;
+      return;
+    }
     panel.innerHTML = `<div class="invite-box">
       <span class="empty-icon" style="width:52px;height:52px;border-radius:16px;margin:0">${icon('music')}</span>
       <strong>Spotify'ı bağla</strong>
@@ -5558,8 +5647,8 @@ async function renderSettings(root) {
     try {
       const now = await api('/api/spotify/now').catch(() => ({ playing: null }));
       if (now?.playing) { paintSpotify({ now: now.playing }); return; }
-      const status = await api('/api/spotify/status').catch(() => ({ connected: false }));
-      paintSpotify(status?.connected ? { now: null } : null);
+      const status = await api('/api/spotify/status').catch(() => ({ connected: false, needsSetup: true }));
+      paintSpotify({ now: null, connected: status?.connected, needsSetup: status?.needsSetup, configured: status?.configured });
       if (status?.connected) {
         const p = root.querySelector('[data-spotify-panel]');
         if (p && !p.textContent.includes('şu an çalıyor')) {
