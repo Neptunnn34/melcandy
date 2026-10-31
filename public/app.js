@@ -1400,8 +1400,15 @@ function connectSSE() {
       emit(type, data);
     });
   }
+  let retryT = null;
+  const scheduleRetry = () => {
+    if (retryT) return;
+    if (document.visibilityState !== 'visible') return;
+    retryT = setTimeout(() => { retryT = null; connectSSE(); }, 2500);
+  };
   source.addEventListener('error', () => {
-    // EventSource kendisi yeniden bağlanır.
+    // EventSource kendisi yeniden bağlanır; olmazsa biz tetikleriz.
+    if (source.readyState === 2) scheduleRetry();
   });
 }
 
@@ -1540,6 +1547,10 @@ function wireGlobals() {
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible' && S.me) {
       api('/api/badges').then((data) => refreshBadges(data.badges)).catch(() => {});
+      try {
+        if (!S.es || S.es.readyState === 2) connectSSE();
+        else emit('reconnected', {});
+      } catch {}
     }
   });
 
@@ -4065,6 +4076,7 @@ async function renderMessages(root, { params } = {}) {
   const onSearch = () => applySearch();
 
   root.addEventListener('click', onClick);
+  window.__mcLoadSide = loadSide;
   searchEl.addEventListener('input', onSearch);
   window.addEventListener('ikimiz:event', onRealtime);
 
@@ -4956,6 +4968,19 @@ async function renderConversation(container, username) {
   const onVisible = () => {
     if (document.visibilityState === 'visible') markSeen();
   };
+  const onAppReconnected = () => {
+    // Arka plandan donuste kacmis mesajlari yakala: thread + yan listeyi tazele
+    api(path + '/messages?limit=50').then((data) => {
+      const known = new Set(state.messages.map((m) => m.id));
+      let added = false;
+      for (const m of (data.messages || [])) {
+        if (!known.has(m.id)) { state.messages.push(m); added = true; }
+      }
+      if (added) { sortMessages(); paint({}); markSeen(); }
+    }).catch(() => {});
+    if (typeof window.__mcLoadSide === 'function') { try { window.__mcLoadSide(); } catch {} }
+  };
+  window.addEventListener('ikimiz:event', (e) => { if (e.detail?.type === 'reconnected') onAppReconnected(); });
 
   form.addEventListener('submit', onFormSubmit);
   textarea.addEventListener('input', onTextareaInput);
@@ -5326,6 +5351,13 @@ async function renderSettings(root) {
       </section>
 
       <section class="settings-card">
+        <div class="settings-card-head">${icon('music')}<div><h2>Spotify</h2><p>Ne dinliyorsan profilinde görünsün.</p></div></div>
+        <div class="settings-card-body" data-spotify-panel>
+          <div class="chat-loading" style="padding:10px"><span class="spinner"></span></div>
+        </div>
+      </section>
+
+      <section class="settings-card">
         <div class="settings-card-head">${icon('shield')}<div><h2>Güvenlik</h2><p>Şifren ve açık oturumların.</p></div></div>
         <div class="settings-row clickable" data-password-open>
           ${icon('key', 'ico lead')}
@@ -5479,6 +5511,63 @@ async function renderSettings(root) {
       toast('Davet bağlantısı hazır', 'success');
     } catch (error) {
       toast(error.message, 'error');
+    }
+  };
+
+  /* ------------------------------------------------------------- spotify */
+
+  const paintSpotify = (info) => {
+    const panel = root.querySelector('[data-spotify-panel]');
+    if (!panel) return;
+    if (info?.now?.title) {
+      panel.innerHTML = `<div class="invite-box">
+        <span class="eyebrow">şu an çalıyor</span>
+        <strong>${esc(info.now.title)}${info.now.artist ? ` — ${esc(info.now.artist)}` : ''}</strong>
+        <p>${info.now.album ? esc(info.now.album) : 'Spotify'} · profilinde rozet olarak görünüyor.</p>
+        <div class="invite-actions">
+          <button type="button" class="btn btn-sm btn-ghost" data-spotify-refresh>${icon('refresh')} Yenile</button>
+          <button type="button" class="btn btn-sm btn-outline" data-spotify-disconnect>Bağlantıyı kes</button>
+        </div>
+      </div>`;
+      return;
+    }
+    panel.innerHTML = `<div class="invite-box">
+      <span class="empty-icon" style="width:52px;height:52px;border-radius:16px;margin:0">${icon('music')}</span>
+      <strong>Spotify'ı bağla</strong>
+      <p>Bağlayınca o an dinlediğin şarkı profilinde rozet olarak görünür. PC'de ve telefonda ayrı ayrı bağlarsın.</p>
+      <div class="invite-actions">
+        <button type="button" class="btn btn-sm btn-primary" data-spotify-connect>${icon('music')} Spotify ile bağlan</button>
+        <button type="button" class="btn btn-sm btn-outline" data-spotify-manual>Manuel yaz</button>
+      </div>
+    </div>
+    <form data-spotify-manual-form style="display:grid;gap:10px;margin-top:12px">
+      <div class="field"><label for="sp-title">Şarkı / aktivite</label>
+        <div class="input-wrap"><input id="sp-title" name="title" maxlength="80" placeholder="örn. Рычаги Машин — Кошка"></div></div>
+      <div class="field"><label for="sp-sub">Sanatçı / detay <span class="hint">isteğe bağlı</span></label>
+        <div class="input-wrap"><input id="sp-sub" name="subtitle" maxlength="80" placeholder="örn. gece tekrarı"></div></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-sm btn-soft" type="submit" data-spotify-manual-save>${icon('check')} Rozeti göster</button>
+        <button class="btn btn-sm btn-ghost" type="button" data-spotify-manual-clear>Rozeti kaldır</button>
+      </div>
+      <p class="tiny muted">Manuel rozet 4 saat görünür. OAuth bağlarsan otomatik olur.</p>
+    </form>`;
+  };
+
+  const loadSpotify = async () => {
+    const panel = root.querySelector('[data-spotify-panel]');
+    try {
+      const now = await api('/api/spotify/now').catch(() => ({ playing: null }));
+      if (now?.playing) { paintSpotify({ now: now.playing }); return; }
+      const status = await api('/api/spotify/status').catch(() => ({ connected: false }));
+      paintSpotify(status?.connected ? { now: null } : null);
+      if (status?.connected) {
+        const p = root.querySelector('[data-spotify-panel]');
+        if (p && !p.textContent.includes('şu an çalıyor')) {
+          p.querySelector('.invite-box p').textContent = 'Bağlı ama şu an çalan bir şey yok. Spotify\'da bir şarkı açıp Yenile\'ye bas.';
+        }
+      }
+    } catch (error) {
+      if (panel) panel.innerHTML = `<p class="tiny muted">${esc(error.message)}</p>`;
     }
   };
 
@@ -5704,11 +5793,55 @@ async function renderSettings(root) {
     if (event.target.closest('[data-delete-account]')) { deleteAccount(); }
   };
 
+  root.addEventListener('click', async (event) => {
+    // Spotify + manuel rozet kısayolları (renderSettings içindeki onClick async olmadığı için burada)
+    if (event.target.closest('[data-spotify-connect]')) { location.href = '/api/spotify/login'; return; }
+    if (event.target.closest('[data-spotify-refresh]')) { loadSpotify(); return; }
+    if (event.target.closest('[data-spotify-disconnect]')) {
+      try { await api('/api/spotify', { method: 'DELETE' }); } catch (error) { toast(error.message, 'error'); }
+      loadSpotify(); return;
+    }
+    if (event.target.closest('[data-spotify-manual]')) {
+      const f = root.querySelector('[data-spotify-manual-form]');
+      if (f) { f.scrollIntoView({ behavior: 'smooth', block: 'center' }); f.querySelector('#sp-title')?.focus(); }
+      return;
+    }
+    if (event.target.closest('[data-spotify-manual-clear]')) {
+      try { await api('/api/me/activity', { method: 'DELETE' }); toast('Rozet kaldırıldı'); } catch (error) { toast(error.message, 'error'); }
+      loadSpotify(); return;
+    }
+  });
+
   root.addEventListener('click', onClick);
+
+  // Spotify + manuel rozet kısayolları (onClick sync olduğu için ayrı async listener)
+  root.addEventListener('submit', async (event) => {
+    const form = event.target.closest('[data-spotify-manual-form]');
+    if (!form) return;
+    event.preventDefault();
+    const title = String(new FormData(form).get('title') || '').trim();
+    const subtitle = String(new FormData(form).get('subtitle') || '').trim();
+    if (!title) { toast('Önce şarkı / aktivite yaz.', 'error'); return; }
+    try {
+      await api('/api/me/activity', { method: 'POST', body: { type: 'custom', title, subtitle } });
+      toast('Rozet açıldı 🎧', 'success');
+      loadSpotify();
+    } catch (error) { toast(error.message, 'error'); }
+  });
 
   loadInvite();
   loadSessions();
   loadStats();
+  loadSpotify();
+  // OAuth dönüşü (?spotify=ok)
+  try {
+    const q = new URLSearchParams(location.search);
+    if (q.get('spotify') === 'ok') {
+      toast('Spotify bağlandı 🎧', 'success');
+      history.replaceState({}, '', location.pathname);
+      loadSpotify();
+    }
+  } catch {}
 }
 
 Views.settings = renderSettings;
