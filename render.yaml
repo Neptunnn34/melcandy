@@ -12,7 +12,3 @@ services:
         value: 0.0.0.0
       - key: PORT
         value: 10000
-    disk:
-      name: melcandy-data
-      mountPath: /opt/render/project/src/data
-      sizeGB: 1
