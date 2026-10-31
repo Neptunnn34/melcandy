@@ -4161,36 +4161,14 @@ async function renderMessages(root, { params } = {}) {
 }
 
 async function renderConversation(container, username) {
-  container.innerHTML = '<div class="chat-loading" style="min-height:220px"><span class="spinner"></span></div>';
-  const path = `/api/conversations/${encodeURIComponent(username)}`;
-
-  let initial;
-  try {
-    initial = await api(`${path}/messages?limit=50`);
-  } catch (error) {
-    container.innerHTML = `<div class="dm-welcome">
-      <div class="dm-welcome-icon">${icon('message')}</div>
-      <h2>Sohbet açılamadı</h2>
-      <p>${esc(error.message || 'Bu kişiyle sohbet başlatılamadı.')}</p>
-      <div class="dm-welcome-actions">
-        <a class="btn btn-primary btn-sm" href="/mesajlar" data-go="/mesajlar">${icon('message')} Sohbetler</a>
-        <a class="btn btn-outline btn-sm" href="/" data-go="/">${icon('home')} Akışa dön</a>
-      </div>
-    </div>`;
-    return;
-  }
-
-  const partner = initial.user || { displayName: username, username };
-
   container.innerHTML = `<div class="chat-page">
         <header class="chat-head">
           <a class="icon-btn dm-mobile-only" href="/mesajlar" data-go="/mesajlar" aria-label="Sohbetlere dön">${icon('arrow-left')}</a>
-          <a href="/u/${esc(partner.username)}" data-go="/u/${esc(partner.username)}" aria-label="${esc(partner.displayName)} profili">${avatarHTML(partner, '', { dot: true })}</a>
+          <span data-chat-head-avatar></span>
           <div class="chat-head-meta">
-            <strong>${esc(partner.displayName)}</strong>
-            <span data-chat-presence>${partner.online ? '<span class="online">şu an çevrimiçi</span>' : (partner.lastSeenAt ? `son görülme ${esc(timeAgoText(partner.lastSeenAt))}` : 'çevrimdışı')}</span>
+            <strong>${esc(username)}</strong>
+            <span data-chat-presence>bağlanıyor…</span>
           </div>
-          <a class="icon-btn dm-mobile-only" href="/u/${esc(partner.username)}" data-go="/u/${esc(partner.username)}" aria-label="${esc(partner.displayName)} profili">${icon('user')}</a>
         </header>
         <div class="chat-body" data-chat-body></div>
         <button type="button" class="chat-scroll-bottom hidden" data-chat-bottom aria-label="En sona in">${icon('chevron-down')}</button>
@@ -4218,6 +4196,47 @@ async function renderConversation(container, username) {
           <div class="sticker-panel hidden" data-chat-stickers></div>
         </div>
       </div>`;
+  const path = `/api/conversations/${encodeURIComponent(username)}`;
+
+  let initial = null;
+  let loadError = null;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      initial = await api(`${path}/messages?limit=50`);
+      loadError = null;
+      break;
+    } catch (error) {
+      loadError = error;
+      // Render uyanıyorsa bekle ve tekrar dene (3 deneme: hemen, 3sn, 8sn sonra)
+      if (attempt < 2) await new Promise((r) => setTimeout(r, attempt === 0 ? 3000 : 5000));
+    }
+  }
+  if (!initial) {
+    const msg = String(loadError?.message || '');
+    const waking = /bağlantı|kurulamadı|ağ|timeout|504|502|503|uyku|fetch/i.test(msg);
+    container.innerHTML = `<div class="dm-welcome">
+      <div class="dm-welcome-icon">${icon('message')}</div>
+      <h2>${waking ? 'Sunucu uyanıyor…' : 'Sohbet açılamadı'}</h2>
+      <p>${waking ? 'Render ücretsiz planda uyudu, uyandırılıyor. Birkaç saniye bekle, otomatik deneyeceğim.' : esc(msg || 'Bu kişiyle sohbet başlatılamadı.')}</p>
+      <div class="dm-welcome-actions">
+        <button type="button" class="btn btn-primary btn-sm" data-chat-retry-auto>${icon('refresh')} Tekrar dene</button>
+        <a class="btn btn-outline btn-sm" href="/mesajlar" data-go="/mesajlar">${icon('message')} Sohbetler</a>
+      </div>
+    </div>`;
+    container.querySelector('[data-chat-retry-auto]')?.addEventListener('click', () => renderConversation(container, username));
+    // Uyanışta otomatik tekrar: arka planda 10sn sonra bir kez daha dene
+    if (waking) setTimeout(() => { if (container.isConnected) renderConversation(container, username); }, 10000);
+    return;
+  }
+
+  const partner = initial.user || { displayName: username, username };
+  // Önce başlığı gerçek veriyle güncelle (zaten çizili iskeletin içine)
+  const headAva = container.querySelector('[data-chat-head-avatar]');
+  if (headAva) headAva.innerHTML = `<a href="/u/${esc(partner.username)}" data-go="/u/${esc(partner.username)}" aria-label="${esc(partner.displayName)} profili">${avatarHTML(partner, '', { dot: true })}</a>`;
+  const headMeta = container.querySelector('.chat-head-meta strong');
+  if (headMeta) headMeta.textContent = partner.displayName || username;
+  const headPresence = container.querySelector('[data-chat-presence]');
+  if (headPresence) headPresence.innerHTML = partner.online ? '<span class="online">şu an çevrimiçi</span>' : (partner.lastSeenAt ? `son görülme ${esc(timeAgoText(partner.lastSeenAt))}` : 'çevrimdışı');
 
   const root = container;
   const bodyEl = root.querySelector('[data-chat-body]');
@@ -4273,12 +4292,14 @@ async function renderConversation(container, username) {
     updateSendState();
   };
 
-  const paint = ({ scrollToBottom = false, keepTop = false } = {}) => {
+  const paint = ({ scrollToBottom = false, keepTop = false, forceIntro = false } = {}) => {
     const previousHeight = bodyEl.scrollHeight;
     const previousTop = bodyEl.scrollTop;
     const wasBottom = previousHeight - previousTop - bodyEl.clientHeight < 120;
+    // Sohbet boşsa bile her zaman giriş kartını göster ki ekran asla bomboş kalmasın
     bodyEl.innerHTML = state.messages.length ? chatMessagesHTML(state.messages, partner) : chatIntroHTML(partner);
-    if (scrollToBottom || wasBottom) bodyEl.scrollTop = bodyEl.scrollHeight;
+    if (forceIntro) { bodyEl.scrollTop = 0; }
+    else if (scrollToBottom || wasBottom) bodyEl.scrollTop = bodyEl.scrollHeight;
     else if (keepTop) bodyEl.scrollTop = bodyEl.scrollHeight - previousHeight + previousTop;
     else bodyEl.scrollTop = Math.min(previousTop, bodyEl.scrollHeight);
     bottomButton.classList.toggle('hidden', nearBottom());
@@ -5030,20 +5051,35 @@ async function renderConversation(container, username) {
   const onVisible = () => {
     if (document.visibilityState === 'visible') markSeen();
   };
-  const onAppReconnected = () => {
-    // Arka plandan dönüşte kaçırılan mesajları YERİNDE yakala (sayfa boşaltılmadan).
-    let alive = true;
-    try { alive = document.visibilityState === 'visible'; } catch {}
-    if (!alive) return;
-    api(path + '/messages?limit=50').then((data) => {
+  // Sekmeye dönüşte mesajları YERİNDE yenile + sohbet başlığını canlandır.
+  // Eskiden sayfa boşalıp 'Sohbet açılamadı'ya düşüyordu; artık düşmez.
+  const refreshConversation = async () => {
+    try {
+      const data = await api(`${path}/messages?limit=50`);
       const known = new Set(state.messages.map((m) => m.id));
       let added = false;
       for (const m of (data.messages || [])) {
         if (!known.has(m.id)) { state.messages.push(m); added = true; }
       }
-      if (added) { sortMessages(); paint({ scrollToBottom: true }); }
+      if (added) sortMessages();
+      if (data.user) {
+        partner.online = data.user.online;
+        partner.lastSeenAt = data.user.lastSeenAt ?? partner.lastSeenAt;
+        renderPresence();
+      }
+      paint({ scrollToBottom: added, forceIntro: !state.messages.length });
       markSeen();
-    }).catch(() => {});
+    } catch (error) {
+      // Sunucu uyuyorsa bile ekranı boşaltma: mevcut mesajlar + bilgi notu kalsın
+      if (!state.messages.length) paint({ forceIntro: true });
+    }
+  };
+  const onAppReconnected = () => {
+    // Arka plandan dönüşte kaçırılan mesajları YERİNDE yakala (sayfa boşaltılmadan).
+    let alive = true;
+    try { alive = document.visibilityState === 'visible'; } catch {}
+    if (!alive) return;
+    refreshConversation();
     if (typeof window.__mcLoadSide === 'function') { try { window.__mcLoadSide(); } catch {} }
   };
   window.addEventListener('ikimiz:event', (e) => { if (e.detail?.type === 'reconnected') onAppReconnected(); });
@@ -5056,7 +5092,7 @@ async function renderConversation(container, username) {
   window.addEventListener('ikimiz:event', onRealtime);
   document.addEventListener('visibilitychange', onVisible);
 
-  paint({ scrollToBottom: true });
+  paint({ scrollToBottom: true, forceIntro: true });
   autoGrow();
   markSeen();
 

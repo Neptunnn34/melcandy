@@ -1766,6 +1766,11 @@ textarea:focus, .textarea:focus { border-color: var(--brand); background: var(--
 
 .layer { position: fixed; inset: 0; z-index: 100; display: none; }
 .layer.open { display: block; }
+.layer-backdrop { cursor: pointer; position: absolute; inset: 0; }
+/* Sohbet iskeleti her zaman görünür boyda kalsın: API yavaşken bile gri boşluk değil, iskelet görünür */
+.dm-main:empty { min-height: 420px; }
+.chat-body:empty { min-height: 300px; }
+.chat-body:empty::after { content: "Yükleniyor…"; display: block; margin: auto; color: var(--muted); font-size: 12.5px; }
 .layer-backdrop {
   position: absolute;
   inset: 0;
