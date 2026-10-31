@@ -1543,12 +1543,11 @@ function wireGlobals() {
       if (boot.authenticated) {
         S.badges = boot.badges || S.badges;
         setNavBadges();
-        try { connectSSE(); } catch {}
-        // Aktif sohbet açıksa yeni mesajları çek (alt-tab / arka plan dönüşü %100 tazeleme)
+        try { if (!S.es || S.es.readyState === 2) connectSSE(); } catch {}
+        // NOT: burada route() ÇAĞIRMA! route() tüm sayfayı boşaltıp yeniden
+        // kuruyor, Render uyanana kadar ekran bomboş kalıyor. Sadece olayı
+        // yay, açık sohbet kendi mesajlarını yerinde tazelesin.
         emit('reconnected', boot);
-        if (S.currentView && ['messages', 'conversation'].includes(S.currentView.name)) {
-          try { route({ keepScroll: true }); } catch {}
-        }
       }
     }).catch(() => {});
   };
@@ -1559,13 +1558,9 @@ function wireGlobals() {
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible' && S.me) {
       api('/api/badges').then((data) => refreshBadges(data.badges)).catch(() => {});
-      try { connectSSE(); } catch {}
-      // Sekme geri gelince her durumda aktif görünümü tazele (arka plan kaybolması %100 fix)
+      try { if (!S.es || S.es.readyState === 2) connectSSE(); } catch {}
+      // NOT: route() yok! Sadece olayı yay, açık sohbet mesajlarını yerinde yeniler.
       emit('reconnected', {});
-      try {
-        if (S.currentView && ['messages', 'conversation'].includes(S.currentView.name)) route({ keepScroll: true });
-        else if (S.currentView && S.currentView.name === 'feed') route({ keepScroll: true });
-      } catch {}
     }
   });
 
@@ -5036,14 +5031,18 @@ async function renderConversation(container, username) {
     if (document.visibilityState === 'visible') markSeen();
   };
   const onAppReconnected = () => {
-    // Arka plandan donuste kacmis mesajlari yakala: thread + yan listeyi tazele
+    // Arka plandan dönüşte kaçırılan mesajları YERİNDE yakala (sayfa boşaltılmadan).
+    let alive = true;
+    try { alive = document.visibilityState === 'visible'; } catch {}
+    if (!alive) return;
     api(path + '/messages?limit=50').then((data) => {
       const known = new Set(state.messages.map((m) => m.id));
       let added = false;
       for (const m of (data.messages || [])) {
         if (!known.has(m.id)) { state.messages.push(m); added = true; }
       }
-      if (added) { sortMessages(); paint({}); markSeen(); }
+      if (added) { sortMessages(); paint({ scrollToBottom: true }); }
+      markSeen();
     }).catch(() => {});
     if (typeof window.__mcLoadSide === 'function') { try { window.__mcLoadSide(); } catch {} }
   };
