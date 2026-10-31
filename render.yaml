@@ -1,0 +1,18 @@
+services:
+  - type: web
+    name: melcandy
+    runtime: node
+    plan: free
+    buildCommand: npm install
+    startCommand: node server.js
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: HOST
+        value: 0.0.0.0
+      - key: PORT
+        value: 10000
+    disk:
+      name: melcandy-data
+      mountPath: /opt/render/project/src/data
+      sizeGB: 1
