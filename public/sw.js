@@ -1,5 +1,5 @@
 /* MelCandy — çevrimdışı kabuk */
-const CACHE = 'melcandy-shell-v10';
+const CACHE = 'melcandy-shell-v11';
 const SHELL = [
   '/',
   '/index.html',
